@@ -8,7 +8,7 @@ class Publisher:
         self.active = False
         self.qos = 0
         self.delay = 0
-        self.client = mqtt.Client(client_id=f"pub-{instance_id}", clean_session=True, protocol=mqtt.MQTTv311)
+        self.client = mqtt.Client(f"pub-{instance_id}")
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
 
@@ -29,8 +29,7 @@ class Publisher:
 
     def publish_messages(self):
         counter = 0
-        start_time = time.time()
-        while self.active and time.time() - start_time < 60:  # Publish for 60 seconds
+        while self.active:
             topic = f"counter/{self.instance_id}/{self.qos}/{self.delay}"
             message = str(counter)
             self.client.publish(topic, message, qos=self.qos)
@@ -39,10 +38,14 @@ class Publisher:
         self.client.loop_stop()
 
     def run(self):
-        self.client.connect("127.0.0.1", 1883, 60)
+        self.client.connect("localhost", 1883, 60)
         self.client.loop_start()
-        threading.Thread(target=self.publish_messages).start()  # Start publishing in a new thread
+        self.publish_messages()
 
-publishers = [Publisher(i) for i in range(1, 6)]  # Create 5 publishers
-for publisher in publishers:
-    publisher.run()  # Start each publisher
+
+# Creating and running 5 instances of Publisher
+publishers = []
+for i in range(1, 6):
+    publisher = Publisher(i)
+    publishers.append(publisher)
+    threading.Thread(target=publisher.run).start()
