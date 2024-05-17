@@ -78,5 +78,5 @@ class Analyser:
 
         self.client.loop_stop()
 
-    analyser = Analyser()
-    analyser.run_tests()
+analyser = Analyser()
+analyser.run_tests()
