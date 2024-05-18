@@ -12,12 +12,14 @@ def create_publisher(instance_id):
         'qos': 0,
         'delay': 0,
         'instance_count': 0,
-        'active': False
+        'active': False,
+        'ready': False
     }
 
     def on_connect(client, userdata, flags, rc):
         for topic in REQUEST_TOPICS:
             client.subscribe(topic)
+        client.subscribe('request/sync')
 
     def on_message(client, userdata, msg):
         nonlocal state
@@ -28,6 +30,9 @@ def create_publisher(instance_id):
         elif msg.topic == 'request/instancecount':
             requested_instance_count = int(msg.payload.decode())
             state['active'] = (int(instance_id.split('-')[1]) <= requested_instance_count)
+        elif msg.topic == 'request/sync':
+            if msg.payload.decode() == 'start':
+                state['ready'] = True
 
     def publish_messages(client, qos, delay):
         global counter
@@ -50,7 +55,7 @@ def create_publisher(instance_id):
         client.loop_start()
 
         while True:
-            if state['active']:
+            if state['ready']:
                 publish_messages(client, state['qos'], state['delay'])
             time.sleep(1)
 
