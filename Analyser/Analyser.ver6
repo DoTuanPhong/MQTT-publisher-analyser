@@ -12,32 +12,21 @@ DURATION = 60
 
 # Data structure to hold message data
 messages = deque()
-first_message_time = None
-last_message_time = None
 
 def on_connect(client, userdata, flags, rc):
-    # print(f"Analyser connected with result code {rc}")
     return rc == 0
 
 def on_message(client, userdata, msg):
-    global first_message_time, last_message_time
     payload = int(msg.payload.decode())
     timestamp = time.time()
     messages.append((payload, timestamp))
-    # print(f"Analyser received message {payload} at {timestamp}")
-
-    if first_message_time is None:
-        first_message_time = timestamp
-    last_message_time = timestamp
 
 def send_requests(client, qos, delay, instance_count):
-    # print(f"Sending requests: QoS={qos}, Delay={delay}ms, InstanceCount={instance_count}")
     client.publish('request/qos', qos)
     client.publish('request/delay', delay)
     client.publish('request/instancecount', instance_count)
 
 def analyze_results():
-    global first_message_time, last_message_time
     received_counter = len(messages)
     print(f"Received {received_counter} messages")
     if received_counter == 0:
@@ -48,28 +37,42 @@ def analyze_results():
             "median_gap": None
         }
 
-    first_msg, first_timestamp = messages[0]
+    # Convert deque to numpy array to avoid mutation during iteration and for efficient calculations
+    messages_np = np.array(messages, dtype=[('counter', int), ('timestamp', float)])
+    
+    # Extract message counters and timestamps
+    counters = messages_np['counter']
+    timestamps = messages_np['timestamp']
+
+    first_msg = np.min(counters)
+    first_timestamp = timestamps[np.argmin(counters)]
+    last_msg = np.max(counters)
+    last_timestamp = timestamps[np.argmax(counters)]
+
     print(f"First message: {first_msg} at {first_timestamp}")
-    last_msg, last_timestamp = messages[-1]
     print(f"Last message: {last_msg} at {last_timestamp}")
+    
     expected_counter = last_msg - first_msg + 1
 
     lost_messages = expected_counter - received_counter
     print(f"Lost messages: {lost_messages}", f"Expected messages: {expected_counter}",  f"Received messages: {received_counter}")
     loss_rate = (lost_messages / expected_counter) * 100
     print(f"Loss rate: {loss_rate}")
-    messages_np = np.array(messages)
-    out_of_order_count = np.sum(messages_np[1:, 0] < messages_np[:-1, 0])
+    
+    out_of_order_count = np.sum(counters[1:] < counters[:-1])
     print(f"Out of order messages: {out_of_order_count}")
-    out_of_order_rate = (out_of_order_count / len(messages)) * 100
+    out_of_order_rate = (out_of_order_count / received_counter) * 100
     print(f"Out of order rate: {out_of_order_rate}")
 
-    # gaps = ((messages[i][1] - messages[i-1][1]) * 1000 for i in range(1, len(messages))
-    #         if messages[i][0] == messages[i-1][0] + 1)
-    # median_gap = np.median(np.fromiter(gaps, float)) if gaps else None
-    median_gap = 1
+    # Calculate the gaps where the counter is incremented by 1
+    valid_gaps = np.where(counters[1:] == counters[:-1] + 1)[0]
+    if valid_gaps.size > 0:
+        gaps = (timestamps[valid_gaps + 1] - timestamps[valid_gaps]) * 1000  # Convert to milliseconds
+        median_gap = np.median(gaps)
+    else:
+        median_gap = None
 
-    first_to_last_duration = last_message_time - first_message_time if first_message_time and last_message_time else None
+    first_to_last_duration = last_timestamp - first_timestamp if first_timestamp and last_timestamp else None
 
     return {
         "total_rate": received_counter / DURATION,
@@ -80,13 +83,11 @@ def analyze_results():
     }
 
 def run_test(client, pub_qos, sub_qos, delay, instance_count):
-    global messages, first_message_time, last_message_time
+    global messages
     messages = deque()
-    first_message_time = None
-    last_message_time = None
     
     send_requests(client, pub_qos, delay, instance_count)
-    time.sleep(DURATION)  # Extra 0 seconds to account for setup time
+    time.sleep(DURATION+0.5)
     
     return analyze_results()
 
