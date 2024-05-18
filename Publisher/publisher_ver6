@@ -1,0 +1,73 @@
+import paho.mqtt.client as mqtt
+import time
+import threading
+
+BROKER = 'localhost'
+REQUEST_TOPICS = ['request/qos', 'request/delay', 'request/instancecount']
+counter = 0
+def create_publisher(instance_id):
+    state = {
+        'qos': 0,
+        'delay': 0,
+        'instance_count': 0,
+        'active': False
+    }
+
+    def on_connect(client, userdata, flags, rc):
+        # print(f"{instance_id} connected with result code {rc}")
+        for topic in REQUEST_TOPICS:
+            client.subscribe(topic)
+            # print(f"{instance_id} subscribed to {topic}")
+
+    def on_message(client, userdata, msg):
+        nonlocal state
+        # print(f"{instance_id} received message on {msg.topic}: {msg.payload.decode()}")
+        if msg.topic == 'request/qos':
+            state['qos'] = int(msg.payload.decode())
+        elif msg.topic == 'request/delay':
+            state['delay'] = int(msg.payload.decode())
+        elif msg.topic == 'request/instancecount':
+            requested_instance_count = int(msg.payload.decode())
+            state['active'] = (int(instance_id.split('-')[1]) <= requested_instance_count)
+            # print(f"{instance_id} active state: {state['active']}")
+
+    def publish_messages(client, qos, delay):
+        global counter
+        start_time = time.time()
+        while time.time() - start_time < 60:
+            if not state['active']:
+                break
+            topic = f'counter/{instance_id}/{qos}/{delay}'
+            client.publish(topic, f"{counter}", qos=qos)
+            counter += 1
+            time.sleep(delay / 1000.0)  # Convert milliseconds to seconds
+
+    def start_publisher():
+        client = mqtt.Client()
+        client.on_connect = on_connect
+        client.on_message = on_message
+
+        client.connect(BROKER, 1883, 60)
+        client.loop_start()
+
+        while True:
+            if state['active']:
+                # print(f"{instance_id} starting to publish messages with QoS {state['qos']} and delay {state['delay']} ms")
+                publish_messages(client, state['qos'], state['delay'])
+            time.sleep(1)
+
+        client.loop_stop()
+        client.disconnect()
+
+    return start_publisher
+
+if __name__ == "__main__":
+    publishers = ['pub-1', 'pub-2', 'pub-3', 'pub-4', 'pub-5']
+    threads = []
+    for pub in publishers:
+        publisher_thread = threading.Thread(target=create_publisher(pub))
+        threads.append(publisher_thread)
+        publisher_thread.start()
+
+    for thread in threads:
+        thread.join()
