@@ -132,7 +132,7 @@ def run_test(client, pub_qos, sub_qos, delay, instance_count):
     }
     
     send_requests(client, pub_qos, delay, instance_count)
-    time.sleep(DURATION + 0.5)  # Extra time to account for setup and teardown
+    time.sleep(DURATION )  # Extra time to account for setup and teardown
     
     return analyze_results()
 
@@ -150,8 +150,14 @@ def start_analyzer():
         for sub_qos in QOS_VALUES:
             for delay in DELAY_VALUES:
                 for instance_count in INSTANCE_COUNT_VALUES:
-                    print(f"Subscribing with QoS {sub_qos}", f"Publishing with QoS {pub_qos}", f"Delay {delay}", f"Instance count {instance_count}")
+                    print(f"Subscribing with QoS {sub_qos},", f"Publishing with QoS {pub_qos},", f"Delay {delay},", f"Instance count {instance_count}")
                     client.subscribe(f'counter/+/+/+', qos=sub_qos)
+                    send_requests(client, pub_qos, delay, instance_count)
+                    time.sleep(1)  # Allow publishers to process the requests
+                    
+                    # Synchronization step
+                    client.publish('request/sync', 'start')
+                    
                     result = run_test(client, pub_qos, sub_qos, delay, instance_count)
                     result.update({"pub_qos": pub_qos, "sub_qos": sub_qos, "delay": delay, "instance_count": instance_count})
                     results.append(result)
@@ -162,7 +168,8 @@ def start_analyzer():
 
     client.loop_stop()
     client.disconnect()
-    
+
+ 
     # Print all results
     for result in results:
         print(result)
