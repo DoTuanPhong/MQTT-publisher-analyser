@@ -12,14 +12,42 @@ DURATION = 60
 
 # Data structure to hold message data
 messages = deque()
+sys_metrics = {
+    '$SYS/broker/clients/connected': [],
+    '$SYS/broker/load/connections/1min': [],
+    '$SYS/broker/load/messages/received/1min': [],
+    '$SYS/broker/load/messages/sent/1min': [],
+    '$SYS/broker/load/publish/dropped/1min': [],
+    '$SYS/broker/load/sockets/1min': [],
+    '$SYS/broker/messages/inflight': [],
+    '$SYS/broker/heap/current size': [],
+    '$SYS/broker/heap/maximum size': [],
+    '$SYS/broker/messages/received': [],
+    '$SYS/broker/messages/sent': []
+}
 
 def on_connect(client, userdata, flags, rc):
-    return rc == 0
+    if rc == 0:
+        client.subscribe('$SYS/#')
 
 def on_message(client, userdata, msg):
+    if msg.topic.startswith('$SYS'):
+        process_sys_message(msg)
+    else:
+        process_message(msg)
+
+def process_message(msg):
     payload = int(msg.payload.decode())
     timestamp = time.time()
     messages.append((payload, timestamp))
+
+def process_sys_message(msg):
+    topic = msg.topic
+    payload = msg.payload.decode()
+    timestamp = time.time()
+    
+    if topic in sys_metrics:
+        sys_metrics[topic].append((timestamp, payload))
 
 def send_requests(client, qos, delay, instance_count):
     client.publish('request/qos', qos)
@@ -34,7 +62,8 @@ def analyze_results():
             "total_rate": 0,
             "loss_rate": 100,
             "out_of_order_rate": 0,
-            "median_gap": None
+            "median_gap": None,
+            "sys_metrics": sys_metrics
         }
 
     # Convert deque to numpy array to avoid mutation during iteration and for efficient calculations
@@ -71,23 +100,39 @@ def analyze_results():
         median_gap = np.median(gaps)
     else:
         median_gap = None
-
+    print(f"Median gap: {median_gap}")
     first_to_last_duration = last_timestamp - first_timestamp if first_timestamp and last_timestamp else None
+    print(f"First to last duration: {first_to_last_duration}")
+    print(f"System metrics: {sys_metrics}")
 
     return {
         "total_rate": received_counter / DURATION,
         "loss_rate": loss_rate,
         "out_of_order_rate": out_of_order_rate,
         "median_gap": median_gap,
-        "first_to_last_duration": first_to_last_duration
+        "first_to_last_duration": first_to_last_duration,
+        "sys_metrics": sys_metrics
     }
 
 def run_test(client, pub_qos, sub_qos, delay, instance_count):
-    global messages
+    global messages, sys_metrics
     messages = deque()
+    sys_metrics = {
+        '$SYS/broker/clients/connected': [],
+        '$SYS/broker/load/connections/1min': [],
+        '$SYS/broker/load/messages/received/1min': [],
+        '$SYS/broker/load/messages/sent/1min': [],
+        '$SYS/broker/load/publish/dropped/1min': [],
+        '$SYS/broker/load/sockets/1min': [],
+        '$SYS/broker/messages/inflight': [],
+        '$SYS/broker/heap/current size': [],
+        '$SYS/broker/heap/maximum size': [],
+        '$SYS/broker/messages/received': [],
+        '$SYS/broker/messages/sent': []
+    }
     
     send_requests(client, pub_qos, delay, instance_count)
-    time.sleep(DURATION+0.5)
+    time.sleep(DURATION + 0.5)  # Extra time to account for setup and teardown
     
     return analyze_results()
 
@@ -112,6 +157,7 @@ def start_analyzer():
                     results.append(result)
                     print(f"Results: {result}")
                     print(f"Unsubscribing from counter topics")
+                    print("===============================================")
                     client.unsubscribe(f'counter/+/+/+')
 
     client.loop_stop()
