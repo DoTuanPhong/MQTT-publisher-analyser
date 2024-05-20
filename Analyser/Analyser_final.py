@@ -184,8 +184,9 @@ def start_analyzer():
     client.on_connect = on_connect
     client.on_message = on_message
 
+    # Connect to the broker and start the client loop
     client.connect(BROKER, 1883, 60)
-    client.loop_start() # Start the MQTT client loop
+    client.loop_start()
 
     results = [] # List to hold the results
 
@@ -198,6 +199,7 @@ def start_analyzer():
                     client.subscribe(f'counter/+/+/+', qos=sub_qos) # Subscribe to all counter topics
                     send_requests(client, pub_qos, delay, instance_count)
 
+                    # Run the test and store the results
                     result = run_test(client, pub_qos, sub_qos, delay, instance_count)
                     result.update({"pub_qos": pub_qos, "sub_qos": sub_qos, "delay": delay, "instance_count": instance_count})
                     results.append(result)
@@ -205,7 +207,7 @@ def start_analyzer():
                     print(f"Unsubscribing from counter topics")
                     print("===============================================")
                     client.unsubscribe(f'counter/+/+/+') # Unsubscribe from all counter topics
-                    
+
     # Stop the MQTT client
     client.loop_stop()
     client.disconnect()
