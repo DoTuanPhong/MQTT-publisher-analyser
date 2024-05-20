@@ -3,13 +3,14 @@ import time
 import threading
 import logging
 
-BROKER = 'localhost'
+BROKER = 'localhost' # Broker address
 REQUEST_TOPICS = ['request/qos', 'request/delay', 'request/instancecount']
 counter = 0 # Global counter variable
 logging.basicConfig(level=logging.INFO)
-counter_lock = threading.Lock() # Lock to   protect the counter variable
+counter_lock = threading.Lock() # Lock to protect the counter variable
 
 class Publisher:
+    # Initialize the publisher with the instance ID
     def __init__(self, instance_id):
         self.instance_id = instance_id
         self.qos = 0
@@ -21,6 +22,7 @@ class Publisher:
         self.client.on_message = self.on_message
         self.lock = threading.Lock()
 
+    # Callback function for when the client receives a CONNACK response from the server
     def on_connect(self, client, userdata, flags, rc):
         for topic in REQUEST_TOPICS:
             client.subscribe(topic)
@@ -45,7 +47,7 @@ class Publisher:
             if not self.active:
                 break
             # Publish messages with a delay
-            with counter_lock:
+            with counter_lock:  # Lock the counter variable
                 topic = f'counter/{self.instance_id}/{self.qos}/{self.delay}'
                 self.client.publish(topic, f"{counter}", qos=self.qos)
                 counter += 1
@@ -58,12 +60,12 @@ class Publisher:
         while True:
             self.publish_messages()  # Reset ready state after publishing burst
             time.sleep(1)
-
+        # Disconnect the client
         self.client.loop_stop()
         self.client.disconnect()
 
 if __name__ == "__main__":
-    publishers = ['pub-1', 'pub-2', 'pub-3', 'pub-4', 'pub-5']
+    publishers = ['pub-1', 'pub-2', 'pub-3', 'pub-4', 'pub-5']  # List of publishers
     threads = []
 
     # Start the publishers
@@ -73,5 +75,6 @@ if __name__ == "__main__":
         threads.append(publisher_thread)
         publisher_thread.start()
 
+    # Wait for all threads to finish
     for thread in threads:
         thread.join()
