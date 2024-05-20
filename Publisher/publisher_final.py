@@ -57,6 +57,7 @@ class Publisher:
         self.client.connect(BROKER, 1883, 60)   # Connect to the broker
         self.client.loop_start()
 
+        # Publish messages indefinitely
         while True:
             self.publish_messages()  # Reset ready state after publishing burst
             time.sleep(1)
