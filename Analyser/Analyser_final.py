@@ -18,25 +18,14 @@ lock = threading.Lock() # Lock to synchronize access to shared data structures
 messages = deque()
 # Data structure to hold system metrics
 sys_metrics = {
-    '$SYS/broker/clients/connected': [],
-    '$SYS/broker/clients/maximum': [],
-    '$SYS/broker/clients/total': [],
-    '$SYS/broker/heap/current size': [],
-    '$SYS/broker/heap/maximum size': [],
-    '$SYS/broker/load/connections/1min': [],
     '$SYS/broker/load/messages/received/1min': [],
     '$SYS/broker/load/messages/sent/1min': [],
-    '$SYS/broker/load/publish/dropped/1min': [],
     '$SYS/broker/load/publish/received/1min': [],
     '$SYS/broker/load/publish/sent/1min': [],
-    '$SYS/broker/messages/inflight': [],
     '$SYS/broker/messages/received': [],
     '$SYS/broker/messages/sent': [],
-    '$SYS/broker/publish/messages/dropped': [],
     '$SYS/broker/publish/messages/received': [],
-    '$SYS/broker/publish/messages/sent': [],
-    '$SYS/broker/retained messages/count': [],
-    '$SYS/broker/subscriptions/count': []
+    '$SYS/broker/publish/messages/sent': []
 }
 
 
@@ -149,25 +138,14 @@ def analyze_results():
 
     # Mapping of system metrics to more readable names
     sys_metrics_mapping = {
-        '$SYS/broker/clients/connected': 'Clients Connected',
-        '$SYS/broker/clients/maximum': 'Clients Maximum',
-        '$SYS/broker/clients/total': 'Clients Total',
-        '$SYS/broker/heap/current size': 'Heap Current Size',
-        '$SYS/broker/heap/maximum size': 'Heap Maximum Size',
-        '$SYS/broker/load/connections/1min': 'Connections (1 min)',
         '$SYS/broker/load/messages/received/1min': 'Messages Received (1 min)',
         '$SYS/broker/load/messages/sent/1min': 'Messages Sent (1 min)',
-        '$SYS/broker/load/publish/dropped/1min': 'Publish Dropped (1 min)',
         '$SYS/broker/load/publish/received/1min': 'Publish Received (1 min)',
         '$SYS/broker/load/publish/sent/1min': 'Publish Sent (1 min)',
-        '$SYS/broker/messages/inflight': 'Messages Inflight',
         '$SYS/broker/messages/received': 'Total Messages Received',
         '$SYS/broker/messages/sent': 'Total Messages Sent',
-        '$SYS/broker/publish/messages/dropped': 'Total Publish Messages Dropped',
         '$SYS/broker/publish/messages/received': 'Total Publish Messages Received',
-        '$SYS/broker/publish/messages/sent': 'Total Publish Messages Sent',
-        '$SYS/broker/retained messages/count': 'Retained Messages Count',
-        '$SYS/broker/subscriptions/count': 'Subscriptions Count'
+        '$SYS/broker/publish/messages/sent': 'Total Publish Messages Sent'
     }
 
     # Extract system metrics with more readable names
@@ -201,25 +179,14 @@ def run_test(client, pub_qos, sub_qos, delay, instance_count):
     messages = deque()
     # Data structure to hold system metrics
     sys_metrics = {
-        '$SYS/broker/clients/connected': [],
-        '$SYS/broker/clients/maximum': [],
-        '$SYS/broker/clients/total': [],
-        '$SYS/broker/heap/current size': [],
-        '$SYS/broker/heap/maximum size': [],
-        '$SYS/broker/load/connections/1min': [],
         '$SYS/broker/load/messages/received/1min': [],
         '$SYS/broker/load/messages/sent/1min': [],
-        '$SYS/broker/load/publish/dropped/1min': [],
         '$SYS/broker/load/publish/received/1min': [],
         '$SYS/broker/load/publish/sent/1min': [],
-        '$SYS/broker/messages/inflight': [],
         '$SYS/broker/messages/received': [],
         '$SYS/broker/messages/sent': [],
-        '$SYS/broker/publish/messages/dropped': [],
         '$SYS/broker/publish/messages/received': [],
-        '$SYS/broker/publish/messages/sent': [],
-        '$SYS/broker/retained messages/count': [],
-        '$SYS/broker/subscriptions/count': []
+        '$SYS/broker/publish/messages/sent': []
     }
 
     
