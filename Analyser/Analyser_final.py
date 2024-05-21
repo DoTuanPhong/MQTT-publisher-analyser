@@ -1,4 +1,3 @@
-
 import paho.mqtt.client as mqtt
 import time
 import numpy as np
@@ -20,17 +19,26 @@ messages = deque()
 # Data structure to hold system metrics
 sys_metrics = {
     '$SYS/broker/clients/connected': [],
+    '$SYS/broker/clients/maximum': [],
+    '$SYS/broker/clients/total': [],
+    '$SYS/broker/heap/current size': [],
+    '$SYS/broker/heap/maximum size': [],
     '$SYS/broker/load/connections/1min': [],
     '$SYS/broker/load/messages/received/1min': [],
     '$SYS/broker/load/messages/sent/1min': [],
     '$SYS/broker/load/publish/dropped/1min': [],
-    '$SYS/broker/load/sockets/1min': [],
+    '$SYS/broker/load/publish/received/1min': [],
+    '$SYS/broker/load/publish/sent/1min': [],
     '$SYS/broker/messages/inflight': [],
-    '$SYS/broker/heap/current size': [],
-    '$SYS/broker/heap/maximum size': [],
     '$SYS/broker/messages/received': [],
-    '$SYS/broker/messages/sent': []
+    '$SYS/broker/messages/sent': [],
+    '$SYS/broker/publish/messages/dropped': [],
+    '$SYS/broker/publish/messages/received': [],
+    '$SYS/broker/publish/messages/sent': [],
+    '$SYS/broker/retained messages/count': [],
+    '$SYS/broker/subscriptions/count': []
 }
+
 
 # Data structure to hold results
 def on_connect(client, userdata, flags, rc):
@@ -43,15 +51,19 @@ def on_message(client, userdata, msg):
         if msg.topic.startswith('$SYS'):
             process_sys_message(msg)
         else:
-            process_message(msg)
+            process_message(client, msg)
 
-def process_message(msg):
+def process_message(client, msg):
     # Extract publisher ID from topic, assuming topic format: 'counter/publisher_id/...'
     topic_parts = msg.topic.split('/')
     publisher_id = topic_parts[1]  # Keep publisher ID as a string
     payload = int(msg.payload.decode())
     timestamp = time.time()
     messages.append((payload, timestamp, publisher_id))
+    
+    # Send acknowledgment
+    ack_topic = f'acknowledgment/{publisher_id}'
+    client.publish(ack_topic, payload)
 
 # Callback function to process system messages
 def process_sys_message(msg):
@@ -71,26 +83,27 @@ def send_requests(client, qos, delay, instance_count):
 
 # Function to analyze the results
 def analyze_results():
-    received_counter = len(messages) # Number of received messages
+    received_counter = len(messages)  # Number of received messages
     print(f"Received {received_counter} messages")
 
-    if received_counter == 0: # No messages received
+    if received_counter == 0:  # No messages received
         return {
             "total_rate": 0,
             "loss_rate": 100,
             "out_of_order_rate": 0,
             "median_gap": None,
-            "sys_metrics": sys_metrics
+            "first_to_last_duration": None,
+            **{key.replace('$SYS/', '').replace('/', '_'): None for key in sys_metrics.keys()}
         }
 
     # Convert messages to a structured NumPy array for easier processing
     messages_np = np.array(messages, dtype=[('counter', int), ('timestamp', float), ('publisher', 'U20')])
-    
+
     # Extract message counters, timestamps, and publishers
     counters = messages_np['counter']
     timestamps = messages_np['timestamp']
     publishers = messages_np['publisher']
-        
+
     # Calculate the first and last message, and the number of lost messages
     first_msg = np.min(counters)
     first_timestamp = timestamps[np.argmin(counters)]
@@ -99,7 +112,7 @@ def analyze_results():
 
     print(f"First message: {first_msg} at {first_timestamp}")
     print(f"Last message: {last_msg} at {last_timestamp}")
-    
+
     # Calculate the number of lost messages, loss rate, and out-of-order rate
     expected_counter = last_msg - first_msg + 1
     lost_messages = expected_counter - received_counter
@@ -107,7 +120,7 @@ def analyze_results():
     out_of_order_count = np.sum(counters[1:] < counters[:-1])
     out_of_order_rate = (out_of_order_count / received_counter) * 100
 
-    print(f"Lost messages: {lost_messages}", f"Expected messages: {expected_counter}",  f"Received messages: {received_counter}")
+    print(f"Lost messages: {lost_messages}", f"Expected messages: {expected_counter}", f"Received messages: {received_counter}")
     print(f"Loss rate: {loss_rate}%")
     print(f"Out of order messages: {out_of_order_count}")
     print(f"Out of order rate: {out_of_order_rate}%")
@@ -123,25 +136,62 @@ def analyze_results():
         valid_gaps = np.where(pub_counters[1:] == pub_counters[:-1] + 1)[0]
         if valid_gaps.size > 0:
             gaps = (pub_timestamps[valid_gaps + 1] - pub_timestamps[valid_gaps]) * 1000  # Convert to milliseconds
-            publisher_gaps[pub_id].extend(gaps) # Add gaps to the list for the current publisher
-    
+            publisher_gaps[pub_id].extend(gaps)  # Add gaps to the list for the current publisher
+
     # Calculate the median gap and the first-to-last duration
     all_gaps = [gap for gaps in publisher_gaps.values() for gap in gaps]
     median_gap = np.median(all_gaps) if all_gaps else None
-    
+
     first_to_last_duration = last_timestamp - first_timestamp if first_timestamp and last_timestamp else None
 
-    print(f"Median gap: {median_gap} ms")        
+    print(f"Median gap: {median_gap} ms")
     print(f"First to last duration: {first_to_last_duration}")
-    print(f"System metrics: {sys_metrics}")
-    
+
+    # Mapping of system metrics to more readable names
+    sys_metrics_mapping = {
+        '$SYS/broker/clients/connected': 'Clients Connected',
+        '$SYS/broker/clients/maximum': 'Clients Maximum',
+        '$SYS/broker/clients/total': 'Clients Total',
+        '$SYS/broker/heap/current size': 'Heap Current Size',
+        '$SYS/broker/heap/maximum size': 'Heap Maximum Size',
+        '$SYS/broker/load/connections/1min': 'Connections (1 min)',
+        '$SYS/broker/load/messages/received/1min': 'Messages Received (1 min)',
+        '$SYS/broker/load/messages/sent/1min': 'Messages Sent (1 min)',
+        '$SYS/broker/load/publish/dropped/1min': 'Publish Dropped (1 min)',
+        '$SYS/broker/load/publish/received/1min': 'Publish Received (1 min)',
+        '$SYS/broker/load/publish/sent/1min': 'Publish Sent (1 min)',
+        '$SYS/broker/messages/inflight': 'Messages Inflight',
+        '$SYS/broker/messages/received': 'Total Messages Received',
+        '$SYS/broker/messages/sent': 'Total Messages Sent',
+        '$SYS/broker/publish/messages/dropped': 'Total Publish Messages Dropped',
+        '$SYS/broker/publish/messages/received': 'Total Publish Messages Received',
+        '$SYS/broker/publish/messages/sent': 'Total Publish Messages Sent',
+        '$SYS/broker/retained messages/count': 'Retained Messages Count',
+        '$SYS/broker/subscriptions/count': 'Subscriptions Count'
+    }
+
+    # Extract system metrics with more readable names
+    sys_metrics_results = {}
+    for metric, data in sys_metrics.items():
+        metric_name = sys_metrics_mapping.get(metric, metric)
+        values = [float(d[1]) for d in data if d[1].replace('.', '', 1).isdigit()]
+        if values:
+            sys_metrics_results[f'{metric_name} Avg'] = np.mean(values)
+            sys_metrics_results[f'{metric_name} Max'] = np.max(values)
+            sys_metrics_results[f'{metric_name} Min'] = np.min(values)
+        else:
+            sys_metrics_results[f'{metric_name} Avg'] = None
+            sys_metrics_results[f'{metric_name} Max'] = None
+            sys_metrics_results[f'{metric_name} Min'] = None
+
+    print(f"System metrics: {sys_metrics_results}")
+
     return {
         "total_rate": received_counter / DURATION,
         "loss_rate": loss_rate,
         "out_of_order_rate": out_of_order_rate,
         "median_gap": median_gap,
-        "first_to_last_duration": first_to_last_duration,
-        "sys_metrics": sys_metrics
+        **sys_metrics_results
     }
 
 # Function to run the test
@@ -149,19 +199,29 @@ def run_test(client, pub_qos, sub_qos, delay, instance_count):
     global messages, sys_metrics # Use global variables
     # Clear the data structures
     messages = deque()
+    # Data structure to hold system metrics
     sys_metrics = {
         '$SYS/broker/clients/connected': [],
+        '$SYS/broker/clients/maximum': [],
+        '$SYS/broker/clients/total': [],
+        '$SYS/broker/heap/current size': [],
+        '$SYS/broker/heap/maximum size': [],
         '$SYS/broker/load/connections/1min': [],
         '$SYS/broker/load/messages/received/1min': [],
         '$SYS/broker/load/messages/sent/1min': [],
         '$SYS/broker/load/publish/dropped/1min': [],
-        '$SYS/broker/load/sockets/1min': [],
+        '$SYS/broker/load/publish/received/1min': [],
+        '$SYS/broker/load/publish/sent/1min': [],
         '$SYS/broker/messages/inflight': [],
-        '$SYS/broker/heap/current size': [],
-        '$SYS/broker/heap/maximum size': [],
         '$SYS/broker/messages/received': [],
-        '$SYS/broker/messages/sent': []
+        '$SYS/broker/messages/sent': [],
+        '$SYS/broker/publish/messages/dropped': [],
+        '$SYS/broker/publish/messages/received': [],
+        '$SYS/broker/publish/messages/sent': [],
+        '$SYS/broker/retained messages/count': [],
+        '$SYS/broker/subscriptions/count': []
     }
+
     
     # Send requests to the publishers
     send_requests(client, pub_qos, delay, instance_count)
@@ -180,7 +240,7 @@ def save_results(results, filename='results.xlsx'):
 # Function to start the analyzer
 def start_analyzer():
     # Create an MQTT client
-    client = mqtt.Client()
+    client = mqtt.Client(client_id="analyzer", protocol=mqtt.MQTTv311)
     client.on_connect = on_connect
     client.on_message = on_message
 
@@ -201,7 +261,7 @@ def start_analyzer():
 
                     # Run the test and store the results
                     result = run_test(client, pub_qos, sub_qos, delay, instance_count)
-                    result.update({"pub_qos": pub_qos, "sub_qos": sub_qos, "delay": delay, "instance_count": instance_count})
+                    result.update({"pub_qos": pub_qos, "sub_qos": sub_qos, "delay": delay, "instance_count": instance_count, "pub-sub qos difference": pub_qos - sub_qos})
                     results.append(result)
                     print(f"Results: {result}")
                     print(f"Unsubscribing from counter topics")
