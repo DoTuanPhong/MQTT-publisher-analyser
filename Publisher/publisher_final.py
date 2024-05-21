@@ -8,7 +8,7 @@ REQUEST_TOPICS = ['request/qos', 'request/delay', 'request/instancecount']
 ACK_TOPIC = 'acknowledgment/#'
 counter = 0 # Global counter variable
 logging.basicConfig(level=logging.INFO)
-counter_lock = threading.Lock() # Lock to protect the counter variable
+lock = threading.Lock()
 
 class Publisher:
     # Initialize the publisher with the instance ID
@@ -52,7 +52,7 @@ class Publisher:
             if not self.active:
                 break
             # Publish messages with a delay
-            with counter_lock:  # Lock the counter variable
+            with lock:
                 topic = f'counter/{self.instance_id}/{self.qos}/{self.delay}'
                 self.client.publish(topic, f"{counter}", qos=self.qos)
                 counter += 1
